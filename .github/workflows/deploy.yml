@@ -1,47 +1,76 @@
-name: Deploy FindMyClient MCP to Cloud Run
+name: Build and Deploy FindMyClient MCP to Cloud Run
 
 on:
   push:
     branches: [main]
 
 env:
-  SERVICE_NAME: findmyclient-mcp
-  REGION: asia-southeast1
+  REGION: us-central1
+  REPO: findmyclient
+  IMAGE: findmyclient-mcp
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
 
     steps:
+      # 1️⃣ Checkout repository
       - uses: actions/checkout@v4
 
-      - id: auth
+      # 2️⃣ Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      # 3️⃣ Setup gcloud
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Configure Docker for Artifact Registry / GCR
-        run: gcloud auth configure-docker --quiet
-
-      - name: Build image
+      # 4️⃣ Ensure Artifact Registry exists
+      - name: Ensure Artifact Registry exists
         run: |
-          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} .
+          gcloud artifacts repositories describe $REPO \
+            --location=$REGION \
+            --project=${{ secrets.GCP_PROJECT_ID }} || \
+          gcloud artifacts repositories create $REPO \
+            --repository-format=docker \
+            --location=$REGION \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --description="FindMyClient Docker repo"
 
-      - name: Push image
+      # 5️⃣ Configure Docker auth
+      - name: Configure Docker auth
         run: |
-          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
 
+      # 6️⃣ Build Docker image
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t $REGION-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/$REPO/$IMAGE:${{ github.sha }} .
+
+      # 7️⃣ Push Docker image
+      - name: Push Docker image
+        run: |
+          docker push \
+            $REGION-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/$REPO/$IMAGE:${{ github.sha }}
+
+      # 8️⃣ Deploy to Cloud Run
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: ${{ env.SERVICE_NAME }}
+          service: findmyclient-mcp
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/${{ env.IMAGE }}:${{ github.sha }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
-          flags: --allow-unauthenticated
+          timeout: 10m
+
+      # 9️⃣ Make service public
+      - name: Make Cloud Run service public
+        run: |
+          gcloud run services add-iam-policy-binding findmyclient-mcp \
+            --member="allUsers" \
+            --role="roles/run.invoker" \
+            --region=$REGION
