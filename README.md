@@ -12,6 +12,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green)](#)
 
 </div>
+
 **FindMyClient MCP** connects your AI assistant directly to [FindMyClient.org](https://findmyclient.org) — a micro-SaaS lead enrichment API purpose-built for solo founders and freelancers. Skip the API docs, skip the curl commands. Just ask Claude to find and verify a lead, and it does.
 
 ```
