@@ -1,6 +1,6 @@
 <div align="center">
 <p>
-<img src="assets\logo_light.png" 
+<img src="assets/logo_light.png" 
  alt="openpetid-banner" style="width: auto; height: auto;">
 </p>
 
@@ -52,7 +52,10 @@ Manually hunting for verified business emails is a time sink. This server expose
 - A FindMyClient API key — [grab one here](https://findmyclient.org)
 
 ### 📺 Setup in 30 seconds
-![FindMyClient MCP setup in Claude](./assets/claude-setup.gif)
+
+<p align="center">
+<img src="assets/claude_setup.gif" alt="findmyclient-setup" width="720">
+</p>
 
 ### 1. Connect via hosted endpoint (recommended)
 
