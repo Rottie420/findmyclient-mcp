@@ -1,51 +1,133 @@
-# FindMyClient MCP Server (multi-tenant)
+<div align="center">
+<p>
+<img src="assets\logo.png" 
+ alt="openpetid-banner" style="width: auto; height: auto;">
+</p>
 
-Exposes the FindMyClient.org API as MCP tools. **Every tool takes `api_token` as its
-first argument** -- each caller passes their own FindMyClient token. This server has
-no shared credential of its own and never touches your credits when someone else
-uses it.
+ Give your AI agent a lead-gen brain — email discovery, verification, and enrichment for solo founders, straight from the model context.
 
-- `search_leads(api_token, query, max_pages?, max_websites?, max_results?)` -- starts an async search job
-- `get_search_status(api_token, job_id)` -- polls job status
-- `get_enriched_leads(api_token, job_id)` -- fetches validated/scored leads for a completed job
-- `search_and_wait(api_token, query, ...)` -- does all three in one call (recommended)
+[![MCP Protocol](https://img.shields.io/badge/MCP-Protocol-6E56CF?logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io/)
+[![Transport](https://img.shields.io/badge/Transport-HTTP%2FSSE-2563EB)](#)
+[![API](https://img.shields.io/badge/Backend-Flask-000000?logo=flask)](https://findmyclient.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](#)
 
-Transport: **streamable-http** -- works as a remote MCP connector, deployable to Cloud Run.
+</div>
+**FindMyClient MCP** connects your AI assistant directly to [FindMyClient.org](https://findmyclient.org) — a micro-SaaS lead enrichment API purpose-built for solo founders and freelancers. Skip the API docs, skip the curl commands. Just ask Claude to find and verify a lead, and it does.
 
-## Local run
-
-```bash
-pip install -r requirements.txt
-python server.py
-# serves MCP at http://0.0.0.0:8080/mcp
+```
+https://mcp.findmyclient.org/mcp
 ```
 
-No token needed at startup -- callers supply their own per tool call.
+---
 
-## Deploy to Cloud Run
+## ⚡ Why this exists
 
-1. Set GitHub repo secrets: `GCP_PROJECT_ID`, `GCP_SA_KEY` (service account JSON with
-   Cloud Run + Artifact Registry/GCR deploy permissions).
-2. Push to `main` -- `.github/workflows/deploy.yml` builds, pushes, and deploys to
-   Cloud Run (`asia-southeast1` by default).
+Manually hunting for verified business emails is a time sink. This server exposes FindMyClient's job-queue-based enrichment engine as native MCP tools, so any MCP-compatible client (Claude Desktop, Cursor, Windsurf, your own agent) can:
 
-No secrets to manage on the server side -- there's no shared FindMyClient token to protect.
+- Kick off async lead searches without babysitting a job queue
+- Pull back MX-verified emails, not guesses
+- Fold lead enrichment straight into an agentic outreach workflow
 
-## Sharing this with others
+---
 
-Give people the deployed URL + `/mcp` path and tell them: "connect this as an MCP
-server, then get your own FindMyClient API token from your dashboard's API Tokens
-page and pass it as `api_token` when you use the tools."
+## 🧰 Available MCP Tools
 
-Because tokens are per-call arguments (not stored server-side), this is safe to share
-broadly:
-- No one can spend your credits -- they authenticate with their own token.
-- You're only hosting compute (the Cloud Run container), not liability for API usage.
-- If someone's MCP client doesn't want to expose a raw token in every call, they can
-  wrap it client-side (e.g. a small config that auto-fills `api_token` from their own
-  env var) -- that's on the client, not this server.
+*AI assistants read this section directly — keep it exact if you fork this.*
 
-## Connect it in Claude
+| Tool | Description | Parameters |
+|---|---|---|
+| `search_leads` | Submits an async lead-search job against a query (industry, role, location) and returns a job ID. | `query` [string], `location` [string, optional], `limit` [integer, optional] |
+| `get_job_status` | Polls a running search job for completion state. | `job_id` [string] |
+| `get_leads` | Retrieves the finished `LeadsResult` — enriched, MX-verified rows — for a completed job. | `job_id` [string] |
+| `verify_email` | Runs MX/deliverability verification on a single email address. | `email` [string] |
 
-Add as a custom connector using the deployed Cloud Run URL + `/mcp` path, streamable-http
-transport. When prompted by an agent for `api_token`, supply your own FindMyClient token.
+> Update this table to match your live tool schema — MCP clients parse these descriptions to decide *when* to call each tool, so precision here directly drives model behavior.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- An MCP-compatible client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.)
+- A FindMyClient API key — [grab one here](https://findmyclient.org)
+
+### 1. Connect via hosted endpoint (recommended)
+
+No install required — FindMyClient MCP is hosted. Just point your client at the URL:
+
+```
+https://mcp.findmyclient.org/mcp
+```
+
+#### Claude Desktop / Claude.ai
+Settings → Connectors → Add custom connector → paste the URL above → authenticate with your API key.
+
+#### Cursor / Windsurf
+**Settings → Features → MCP → + Add New MCP Server**
+- **Name:** `findmyclient`
+- **Type:** `http`
+- **URL:** `https://mcp.findmyclient.org/mcp`
+
+### 2. Self-hosted / local (optional)
+
+```bash
+git clone https://github.com/Rottie420/findmyclient-mcp
+cd findmyclient-mcp
+pip install -r requirements.txt
+```
+
+`claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "findmyclient": {
+      "command": "python",
+      "args": ["-m", "src.server"],
+      "env": {
+        "FINDMYCLIENT_API_KEY": "your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+---
+
+## 🛠️ Development & Debugging
+
+### Run locally
+
+```bash
+python -m src.server
+```
+
+### Inspect with the MCP Inspector
+
+```bash
+npx -y @modelcontextprotocol/inspector python -m src.server
+```
+
+Use the Inspector to fire `search_leads` → `get_job_status` → `get_leads` manually and confirm the job-queue lifecycle resolves before wiring it into a client.
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+graph LR
+    Client[AI Client / Claude] <-->|MCP over HTTP| Server[FindMyClient MCP Server]
+    Server <-->|REST| API[FindMyClient Flask API]
+    API --> Queue[Async Job Queue]
+    Queue --> MX[MX Verification]
+    Queue --> DB[(Lead Store)]
+```
+
+- **Tools** — the four functions above, mapped 1:1 to FindMyClient's `/search`, `/status`, `/leads`, and `/verify` endpoints
+- **Job queue** — searches run async server-side; poll `get_job_status` until `complete` before calling `get_leads`
+- **Verification layer** — every returned lead is MX-checked before it reaches the model, so agents aren't emailing dead addresses
+
+---
+
+## 📄 License
+MIT
