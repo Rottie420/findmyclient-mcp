@@ -165,7 +165,7 @@ async def search_and_wait(
 
     logger.info("Started FindMyClient job %s for query=%r", job_id, query)
     deadline = time.time() + timeout_seconds
-    poll_interval = 2.0
+    poll_interval = 30
 
     async with httpx.AsyncClient(timeout=30) as client:
         while time.time() < deadline:
@@ -221,7 +221,7 @@ async def search_and_wait(
             # Still running -- back off gradually to keep latency low on
             # fast jobs without hammering the API on slow ones.
             await asyncio.sleep(poll_interval)
-            poll_interval = min(poll_interval * 1.5, 30)
+            poll_interval = min(poll_interval, 45)
 
     logger.warning("Job %s timed out after %ss", job_id, timeout_seconds)
     return {
