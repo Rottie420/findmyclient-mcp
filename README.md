@@ -32,18 +32,17 @@ Manually hunting for verified business emails is a time sink. This server expose
 ---
 
 ## 🧰 Available MCP Tools
-
+ 
 *AI assistants read this section directly — keep it exact if you fork this.*
-
+ 
 | Tool | Description | Parameters |
 |---|---|---|
-| `search_leads` | Submits an async lead-search job against a query (industry, role, location) and returns a job ID. | `query` [string], `location` [string, optional], `limit` [integer, optional] |
-| `get_job_status` | Polls a running search job for completion state. | `job_id` [string] |
-| `get_leads` | Retrieves the finished `LeadsResult` — enriched, MX-verified rows — for a completed job. | `job_id` [string] |
-| `verify_email` | Runs MX/deliverability verification on a single email address. | `email` [string] |
-
-> Update this table to match your live tool schema — MCP clients parse these descriptions to decide *when* to call each tool, so precision here directly drives model behavior.
-
+| `search_and_wait` | Runs a full FindMyClient search in one call: submits the job, polls until it completes (or fails/times out), and returns the enriched leads. The tool to use for a single "find me leads for X" request. | `api_token` [string, required], `query` [string, required], `max_pages` [int, optional], `max_websites` [int, optional], `max_results` [int, optional], `timeout_seconds` [int, default 10000] |
+ 
+Internally, `search_and_wait` composes three FindMyClient API calls — job submission, status polling, and result retrieval — so the model only has to make one tool call instead of managing a poll loop itself.
+ 
+> Get your token from your FindMyClient dashboard → API Tokens. Full reference: [docs.findmyclient.org/api-token](https://docs.findmyclient.org/api-token/)
+ 
 ---
 
 ## 🚀 Quick Start
@@ -55,7 +54,7 @@ Manually hunting for verified business emails is a time sink. This server expose
 ### 📺 Setup in 30 seconds
 
 <p align="center">
-<img src="assets/claude_setup.gif" alt="findmyclient-setup" width="720">
+<img src="https://storage.googleapis.com/findmyclient-downloads/claude_setup_gif.gif" alt="findmyclient-setup" width="720">
 </p>
 
 ### 1. Connect via hosted endpoint (recommended)
