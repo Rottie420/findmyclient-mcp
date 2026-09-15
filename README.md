@@ -54,7 +54,7 @@ Internally, `search_and_wait` composes three FindMyClient API calls — job subm
 ### 📺 Setup in 30 seconds
 
 <p align="center">
-<img src="https://storage.googleapis.com/findmyclient-downloads/claude_setup_gif.gif" alt="findmyclient-setup" width="720">
+<img src="assets/claude_setup_gif.gif" alt="findmyclient-setup" width="720">
 </p>
 
 ### 1. Connect via hosted endpoint (recommended)
