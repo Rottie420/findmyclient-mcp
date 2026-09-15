@@ -51,6 +51,9 @@ Manually hunting for verified business emails is a time sink. This server expose
 - An MCP-compatible client (Claude Desktop, Claude Code, Cursor, Windsurf, etc.)
 - A FindMyClient API key — [grab one here](https://findmyclient.org)
 
+### 📺 Setup in 30 seconds
+![FindMyClient MCP setup in Claude](./assets/claude-setup.gif)
+
 ### 1. Connect via hosted endpoint (recommended)
 
 No install required — FindMyClient MCP is hosted. Just point your client at the URL:
