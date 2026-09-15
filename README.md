@@ -1,6 +1,6 @@
 <div align="center">
 <p>
-<img src="assets\logo.png" 
+<img src="assets\logo_light.png" 
  alt="openpetid-banner" style="width: auto; height: auto;">
 </p>
 
