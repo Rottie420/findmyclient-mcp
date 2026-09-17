@@ -1,10 +1,8 @@
 <div align="center">
 <p>
-<img src="assets/logo_light.png" 
+<img src="assets/logo_ai.png" 
  alt="openpetid-banner" style="width: auto; height: auto;">
 </p>
-
- Give your AI agent a lead-gen brain — email discovery, verification, and enrichment for solo founders, straight from the model context.
 
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol-6E56CF?logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io/)
 [![Transport](https://img.shields.io/badge/Transport-HTTP%2FSSE-2563EB)](#)
@@ -13,8 +11,17 @@
 
 </div>
 
-**FindMyClient MCP** connects your AI assistant directly to [FindMyClient.org](https://findmyclient.org) — a micro-SaaS lead enrichment API purpose-built for solo founders and freelancers. Skip the API docs, skip the curl commands. Just ask Claude to find and verify a lead, and it does.
+<br>
 
+> [!IMPORTANT]
+> The FindMyClient MCP is currently experimental and may change, break,
+> or be updated without notice as we continue to improve it.
+> **FindMyClient MCP** connects your AI assistant directly to [FindMyClient.org](https://findmyclient.org)
+> Skip the API docs, skip the curl commands. Just ask Claude to find and verify a lead, and it does.
+
+<br>
+
+MCP server:
 ```
 https://mcp.findmyclient.org/mcp
 ```
@@ -132,6 +139,7 @@ graph LR
 - **Tools** — the four functions above, mapped 1:1 to FindMyClient's `/search`, `/status`, `/leads`, and `/verify` endpoints
 - **Job queue** — searches run async server-side; poll `get_job_status` until `complete` before calling `get_leads`
 - **Verification layer** — every returned lead is MX-checked before it reaches the model, so agents aren't emailing dead addresses
+
 
 ---
 
