@@ -103,7 +103,8 @@ async def search_leads(
 async def get_search_status(api_token: str, job_id: str) -> dict:
     """Internal helper -- not exposed as an MCP tool. Checks the status of a
     FindMyClient search job. Status is one of 'processing', 'completed', or
-    'failed'. Used internally by search_and_wait's poll loop.
+    'failed'. Used internally by search_and_wait's poll loop and by
+    get_job_result's single-shot check.
     """
     async with httpx.AsyncClient(timeout=30) as client:
         return await _request(
@@ -122,6 +123,19 @@ async def get_enriched_leads(api_token: str, job_id: str) -> dict:
         )
 
 
+def _completed_response(job_id: str, data: dict, leads_data: dict) -> dict:
+    """Shared shape for a completed job's response, used by both
+    search_and_wait and get_job_result so recovered jobs look identical to
+    ones that finished within the original polling call.
+    """
+    return {
+        "status": "completed",
+        "job_id": job_id,
+        "credit_cost": data.get("credit_cost"),
+        **leads_data,
+    }
+
+
 @mcp.tool()
 async def search_and_wait(
     api_token: str,
@@ -133,16 +147,14 @@ async def search_and_wait(
 ) -> dict:
     """Run a full FindMyClient search in one call using your own API token:
     submits the job, polls until it completes (or fails/times out), then
-    returns the enriched leads. This is the only tool this server exposes --
-    there is no separate "check status" or "get leads" tool, so don't try to
-    call one; everything happens inside this single call.
+    returns the enriched leads.
 
     Typical searches finish well within the default 240s timeout. If a search
-    times out anyway, the response still includes job_id -- call
-    search_and_wait again isn't useful for the *same* job (it starts a new
-    search), so if you need to recover a specific slow job, that requires a
-    direct call to the FindMyClient API's /result/{job_id} endpoint outside
-    this tool.
+    times out anyway, the response still includes job_id -- the job keeps
+    running on FindMyClient's side, so don't call search_and_wait again for
+    it (that starts a brand-new, separately charged search). Instead, call
+    get_job_result with that job_id to check on it and pick up the leads once
+    it finishes, without paying for or re-running the search.
 
     api_token: your personal FindMyClient API token (from your dashboard's API
     Tokens section). Required on every call -- this server does not store or
@@ -151,7 +163,10 @@ async def search_and_wait(
     query: what to search for, e.g. "singapore cafe" or "solar installers texas".
 
     max_pages / max_websites / max_results: optional caps on search depth and
-    result count. Leave unset to use the API's defaults.
+    result count. Leave unset to use the API's defaults. Larger values search
+    more thoroughly but take longer -- if you're hitting timeouts, either
+    lower these or budget more timeout_seconds / follow up with
+    get_job_result.
 
     timeout_seconds: how long this call is willing to keep polling before
     giving up and returning an error with the job_id. Keep this under your
@@ -192,28 +207,19 @@ async def search_and_wait(
                 if data.get("error"):
                     logger.warning("Job %s completed with error: %s", job_id, data["error"])
                     return {
+                        "status": "completed",
                         "error": data["error"],
                         "job_id": job_id,
                     }
 
-                leads_data = await _request(
-                    client,
-                    "GET",
-                    f"{BASE_URL}/result/leads/{job_id}",
-                    api_token,
-                    headers=_headers(api_token),
-                )
+                leads_data = await get_enriched_leads(api_token, job_id)
                 logger.info("Job %s completed, credit_cost=%s", job_id, data.get("credit_cost"))
-
-                return {
-                    "job_id": job_id,
-                    "credit_cost": data.get("credit_cost"),
-                    **leads_data,
-                }
+                return _completed_response(job_id, data, leads_data)
 
             if status == "failed":
                 logger.warning("Job %s failed", job_id)
                 return {
+                    "status": "failed",
                     "error": data.get("error", "job failed"),
                     "job_id": job_id,
                 }
@@ -226,6 +232,74 @@ async def search_and_wait(
     logger.warning("Job %s timed out after %ss", job_id, timeout_seconds)
     return {
         "error": "Timed out waiting for job to complete",
+        "job_id": job_id,
+    }
+
+
+@mcp.tool()
+async def get_job_result(api_token: str, job_id: str) -> dict:
+    """Check the status of a FindMyClient search job by its job_id, and return
+    the enriched leads if it has finished. Use this to recover a job that
+    search_and_wait gave up on -- search_and_wait returns job_id in its
+    timeout error precisely so you can pick the job back up here instead of
+    starting a new, separately charged search for the same query.
+
+    Unlike search_and_wait, this makes a single status check and returns
+    immediately -- it does not poll or block. If the job is still
+    'processing', call this again after a short wait (the underlying search
+    keeps running on FindMyClient's side regardless of whether you're
+    checking on it).
+
+    api_token: your personal FindMyClient API token (from your dashboard's
+    API Tokens section). Required on every call -- this server does not
+    store or share tokens between callers, and never echoes a token back in
+    a response.
+
+    job_id: the job_id returned by an earlier search_and_wait (including one
+    that timed out) or by a direct call that started a search.
+
+    Returns a dict with a "status" field: 'processing', 'completed', or
+    'failed'. On 'completed', the enriched leads are included alongside
+    "credit_cost" -- the same shape search_and_wait returns for a job that
+    finished within its own polling window. On 'failed', an "error" field
+    explains why. On 'processing', no leads are available yet.
+    """
+    data = await get_search_status(api_token, job_id)
+
+    if "error" in data and "status" not in data:
+        logger.warning("Job %s status check errored: %s", job_id, data.get("error"))
+        return {
+            "error": data["error"],
+            "detail": data.get("detail"),
+            "job_id": job_id,
+        }
+
+    status = data.get("status")
+
+    if status == "completed":
+        if data.get("error"):
+            logger.warning("Job %s completed with error: %s", job_id, data["error"])
+            return {
+                "status": "completed",
+                "error": data["error"],
+                "job_id": job_id,
+            }
+
+        leads_data = await get_enriched_leads(api_token, job_id)
+        logger.info("Job %s completed (recovered via get_job_result), credit_cost=%s", job_id, data.get("credit_cost"))
+        return _completed_response(job_id, data, leads_data)
+
+    if status == "failed":
+        logger.warning("Job %s failed", job_id)
+        return {
+            "status": "failed",
+            "error": data.get("error", "job failed"),
+            "job_id": job_id,
+        }
+
+    # Still processing -- no leads yet, just report status back.
+    return {
+        "status": status or "processing",
         "job_id": job_id,
     }
 
